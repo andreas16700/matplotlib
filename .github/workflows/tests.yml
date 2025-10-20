@@ -66,23 +66,49 @@ jobs:
             mpl-${{ runner.os }}-
           save-always: true
 
-      - name: Cache Homebrew downloads
-        uses: actions/cache@v4
+      - name: Write Homebrew formulae manifest
+        id: brew_manifest
+        run: |
+          cat > .github/brew-formulae.txt <<'EOF'
+          ccache
+          ninja
+          gobject-introspection
+          gtk4
+          imagemagick
+          EOF
+
+      # Restore brew download cache
+      - name: Restore Homebrew downloads
+        uses: actions/cache/restore@v4
         with:
           path: |
-            ~/Library/Caches/Homebrew
-            ~/Library/Caches/com.apple.SourceKitService
-          key: brew-${{ runner.os }}-${{ matrix.python-version }}-${{ hashFiles('.github/workflows/**', 'requirements/**/*.txt') }}
+            $HOME/.brew-cache      # we'll point HOMEBREW_CACHE here
+          key: brew-${{ runner.os }}-${{ hashFiles('.github/brew-formulae.txt') }}
           restore-keys: |
-            brew-${{ runner.os }}-${{ matrix.python-version }}-
             brew-${{ runner.os }}-
+
+      # Use that path as Homebrew cache
+      - name: Set HOMEBREW_CACHE
+        run: echo "HOMEBREW_CACHE=$HOME/.brew-cache" >> $GITHUB_ENV
 
       - name: Install OS packages (Homebrew)
         run: |
           set -euo pipefail
           brew update
-          # Use cached bottles if present
-          brew install ccache ninja gobject-introspection gtk4 imagemagick || true
+          # Install from manifest
+          xargs brew install < .github/brew-formulae.txt || true
+          # Show what was downloaded into the cache
+          echo "HOMEBREW_CACHE=$HOMEBREW_CACHE"
+          ls -lah "$HOMEBREW_CACHE" || true
+
+      # Save brew download cache
+      - name: Save Homebrew downloads
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            $HOME/.brew-cache
+          key: brew-${{ runner.os }}-${{ hashFiles('.github/brew-formulae.txt') }}
 
       - name: Upgrade pip tooling
         run: |
@@ -153,23 +179,31 @@ jobs:
       
       
 
-      - name: Run tests (pytest + testmon, verbose, pinned interpreter)
+      # Better debug: use the exact interpreter from setup-python
+      - name: Debug Python location + pytest
+        run: |
+          echo "pythonLocation: ${{ env.pythonLocation }}"
+          ${{ env.pythonLocation }}/bin/python -V
+          ${{ env.pythonLocation }}/bin/python -c "import sys,pytest; print('sys.executable:', sys.executable); print('pytest:', getattr(pytest,'__file__','<no file>'))"
+
+      # Optional: collect-only to see discovered tests (doesn't run them)
+      - name: Pytest collect-only (visibility)
+        run: |
+          ${{ env.pythonLocation }}/bin/python -m pytest --testmon --collect-only || true
+
+      # Quick “listing” pass (minimal output of selected tests)
+      - name: Pytest short listing
+        run: |
+          ${{ env.pythonLocation }}/bin/python -m pytest --testmon || true
+
+      # Full run with verbosity and live output
+      - name: Run tests (pytest + testmon, verbose)
         env:
           TESTMON_DATAFILE: ".testmondata"
-          TESTMON_ENVIRONMENT_NAME: "${{ matrix.os }}-py${{ matrix.python-version }}"  # optional label
+          TESTMON_ENVIRONMENT_NAME: "${{ matrix.os }}-py${{ matrix.python-version }}"
         run: |
-          set -euo pipefail
-          export PATH="${{ env.pythonLocation }}/bin:$PATH"
-
-          # Show interpreter + plugin under THIS python
-          python -c "import sys,pytest; print('sys.executable:', sys.executable); print('pytest:', getattr(pytest,'__file__','<no file>'))"
-
-          # Optional: list selected tests first (quick sanity)
-          echo "=== Dry-run listing (selected by testmon) ==="
-          python -m pytest --testmon -q || true
-
-          echo "=== Full run ==="
-          python -m pytest --testmon -vv -s -rA
+          ${{ env.pythonLocation }}/bin/python -m pytest --testmon -vv -s -rA
+      
       
 
       - name: Upload testmon data to server
@@ -195,3 +229,20 @@ jobs:
             echo "⚠️  Failed to upload testmon data (HTTP $HTTP_CODE)"
             cat /tmp/upload_response.json 2>/dev/null || true
           fi
+
+      - name: Warm up Matplotlib cache
+        run: |
+          ${{ env.pythonLocation }}/bin/python - <<'PY'
+          import matplotlib as mpl, matplotlib.pyplot as plt
+          print("mpl cachedir:", mpl.get_cachedir())
+          fig, ax = plt.subplots(); ax.plot([0,1],[0,1]); fig.canvas.draw()
+          PY
+
+      # Save MPL cache
+      - name: Save Matplotlib cache (macOS)
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            ~/Library/Caches/matplotlib
+          key: mpl-${{ runner.os }}-py${{ matrix.python-version }}
