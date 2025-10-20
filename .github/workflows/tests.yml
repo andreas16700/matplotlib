@@ -53,21 +53,18 @@ jobs:
             requirements/testing/minver.txt
             pyproject.toml
 
-      - name: Cache Matplotlib data
-        uses: actions/cache@v4
+      # Restore MPL cache
+      - name: Restore Matplotlib cache
+        uses: actions/cache/restore@v4
         with:
           path: |
-            ~/Library/Caches/matplotlib
-            !~/Library/Caches/matplotlib/tex.cache
-            !~/Library/Caches/matplotlib/test_cache
+            ~/.matplotlib
           key: mpl-${{ runner.os }}-py${{ matrix.python-version }}
           restore-keys: |
             mpl-${{ runner.os }}-py${{ matrix.python-version }}-
             mpl-${{ runner.os }}-
-          save-always: true
 
-      - name: Write Homebrew formulae manifest
-        id: brew_manifest
+      - name: Homebrew manifest
         run: |
           cat > .github/brew-formulae.txt <<'EOF'
           ccache
@@ -77,42 +74,35 @@ jobs:
           imagemagick
           EOF
 
-      # Restore brew download cache
+      # Restore bottle downloads (not installs)
       - name: Restore Homebrew downloads
         uses: actions/cache/restore@v4
         with:
-          path: |
-            $HOME/.brew-cache      # we'll point HOMEBREW_CACHE here
+          path: $HOME/.brew-cache
           key: brew-${{ runner.os }}-${{ hashFiles('.github/brew-formulae.txt') }}
           restore-keys: |
             brew-${{ runner.os }}-
 
-      # Use that path as Homebrew cache
       - name: Set HOMEBREW_CACHE
-        run: echo "HOMEBREW_CACHE=$HOME/.brew-cache" >> $GITHUB_ENV
+        run: |
+          mkdir -p "$HOME/.brew-cache"
+          echo "HOMEBREW_CACHE=$HOME/.brew-cache" >> $GITHUB_ENV
 
       - name: Install OS packages (Homebrew)
         run: |
           set -euo pipefail
           brew update
-          # Install from manifest
           xargs brew install < .github/brew-formulae.txt || true
-          # Show what was downloaded into the cache
-          echo "HOMEBREW_CACHE=$HOMEBREW_CACHE"
-          ls -lah "$HOMEBREW_CACHE" || true
+          echo "Cache dir: $HOMEBREW_CACHE"
+          find "$HOMEBREW_CACHE" -maxdepth 2 -type f -ls | head -n 50 || true
 
-      # Save brew download cache
+      # Save bottle downloads for next run
       - name: Save Homebrew downloads
         if: always()
         uses: actions/cache/save@v4
         with:
-          path: |
-            $HOME/.brew-cache
+          path: $HOME/.brew-cache
           key: brew-${{ runner.os }}-${{ hashFiles('.github/brew-formulae.txt') }}
-
-      - name: Upgrade pip tooling
-        run: |
-          python -m pip install --upgrade pip setuptools wheel
 
       - name: Install Python dependencies
         run: |
@@ -186,10 +176,31 @@ jobs:
           ${{ env.pythonLocation }}/bin/python -V
           ${{ env.pythonLocation }}/bin/python -c "import sys,pytest; print('sys.executable:', sys.executable); print('pytest:', getattr(pytest,'__file__','<no file>'))"
 
+      - name: Compare pip freeze vs DB environment
+        run: |
+          set -euo pipefail
+          echo "=== Current pip freeze (sorted) ==="
+          ${{ env.pythonLocation }}/bin/python -m pip freeze | sort > /tmp/pip_freeze.txt
+          cat /tmp/pip_freeze.txt | head -n 200
+      
+          echo "=== DB environment row(s) ==="
+          sqlite3 .testmondata "SELECT id,environment_name,python_version,substr(system_packages,1,2000) FROM environment;" || true
+      
+          echo "=== Diff (DB vs current) ==="
+          # dump DB system_packages to /tmp/db_freeze.txt (one pkg per line)
+          sqlite3 -csv .testmondata "SELECT system_packages FROM environment LIMIT 1;" 2>/dev/null \
+            | sed 's/\r//g' | tr ';' '\n' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' | sort > /tmp/db_freeze.txt || true
+          if [ -s /tmp/db_freeze.txt ]; then
+            diff -u /tmp/db_freeze.txt /tmp/pip_freeze.txt || true
+          else
+            echo "(No system_packages recorded in DB, or query failed.)"
+          fi
+
+
       # Optional: collect-only to see discovered tests (doesn't run them)
       - name: Pytest collect-only (visibility)
         run: |
-          ${{ env.pythonLocation }}/bin/python -m pytest --testmon --collect-only || true
+          ${{ env.pythonLocation }}/bin/python -m pytest --testmon -rA -vv -s --maxfail=1
 
       # Quick “listing” pass (minimal output of selected tests)
       - name: Pytest short listing
@@ -230,19 +241,22 @@ jobs:
             cat /tmp/upload_response.json 2>/dev/null || true
           fi
 
+      # Ensure dir exists; warm it so it's non-empty
       - name: Warm up Matplotlib cache
         run: |
+          mkdir -p ~/.matplotlib
           ${{ env.pythonLocation }}/bin/python - <<'PY'
           import matplotlib as mpl, matplotlib.pyplot as plt
           print("mpl cachedir:", mpl.get_cachedir())
           fig, ax = plt.subplots(); ax.plot([0,1],[0,1]); fig.canvas.draw()
           PY
+          ls -la ~/.matplotlib || true
 
       # Save MPL cache
-      - name: Save Matplotlib cache (macOS)
+      - name: Save Matplotlib cache
         if: always()
         uses: actions/cache/save@v4
         with:
           path: |
-            ~/Library/Caches/matplotlib
+            ~/.matplotlib
           key: mpl-${{ runner.os }}-py${{ matrix.python-version }}
