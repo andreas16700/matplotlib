@@ -126,40 +126,51 @@ jobs:
           fi
 
       - name: Debug testmon cache + env
+        env:
+          TESTMON_DATAFILE: ".testmondata"
         run: |
           set -euo pipefail
+          echo "pythonLocation: ${{ env.pythonLocation }}"
+          export PATH="${{ env.pythonLocation }}/bin:$PATH"
+
           echo "PWD: $(pwd)"
-          echo "Python: $(python -V)"
-          echo "Which python: $(which python)"
-          echo "Pytest version/plugins:"
-          pytest --version --plugins || true
-      
+          python -V
+          which python
+          python -c "import sys,pytest; print('sys.executable:', sys.executable); print('pytest:', getattr(pytest,'__file__','<no file>'))"
+
           echo "Repo root listing:"
           ls -la
-      
+
           echo "Check .testmondata existence & size:"
           if [ -f .testmondata ]; then
             ls -lh .testmondata
-            echo "File type:"
             file .testmondata || true
-            echo "SQLite tables:"
             sqlite3 .testmondata ".tables" || true
-            echo "SQLite schema (first 100 lines):"
-            sqlite3 .testmondata ".schema" | head -n 100 || true
-            echo "Recent runs (if such a table exists):"
-            sqlite3 .testmondata "SELECT name FROM sqlite_master WHERE type='table';" | tr ' ' '\n' | grep -i run || true
+            sqlite3 .testmondata ".schema" | head -n 60 || true
           else
-            echo "⚠️  .testmondata not found in $(pwd)"
+            echo "⚠️  .testmondata not found"
           fi
+      
+      
 
-
-      - name: Run tests (pytest + testmon, verbose)
+      - name: Run tests (pytest + testmon, verbose, pinned interpreter)
+        env:
+          TESTMON_DATAFILE: ".testmondata"
+          TESTMON_ENVIRONMENT_NAME: "${{ matrix.os }}-py${{ matrix.python-version }}"  # optional label
         run: |
-          # Show selected tests, reasons, live stdout
-          # -vv : more verbose node ids
-          # -s  : don't capture stdout/stderr
-          # -rA : show summary for all test outcomes (skipped/xfailed/etc.)
-          pytest --testmon -vv -s -rA
+          set -euo pipefail
+          export PATH="${{ env.pythonLocation }}/bin:$PATH"
+
+          # Show interpreter + plugin under THIS python
+          python -c "import sys,pytest; print('sys.executable:', sys.executable); print('pytest:', getattr(pytest,'__file__','<no file>'))"
+
+          # Optional: list selected tests first (quick sanity)
+          echo "=== Dry-run listing (selected by testmon) ==="
+          python -m pytest --testmon -q || true
+
+          echo "=== Full run ==="
+          python -m pytest --testmon -vv -s -rA
+      
 
       - name: Upload testmon data to server
         if: always()
