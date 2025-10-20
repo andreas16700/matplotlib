@@ -57,19 +57,31 @@ jobs:
         uses: actions/cache@v4
         with:
           path: |
-            ~/.cache/matplotlib
-            !~/.cache/matplotlib/tex.cache
-            !~/.cache/matplotlib/test_cache
-          key: mpl-${{ runner.os }}-py${{ matrix.python-version }}-${{ github.ref }}
+            ~/Library/Caches/matplotlib
+            !~/Library/Caches/matplotlib/tex.cache
+            !~/Library/Caches/matplotlib/test_cache
+          key: mpl-${{ runner.os }}-py${{ matrix.python-version }}
           restore-keys: |
             mpl-${{ runner.os }}-py${{ matrix.python-version }}-
             mpl-${{ runner.os }}-
+          save-always: true
+
+      - name: Cache Homebrew downloads
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/Library/Caches/Homebrew
+            ~/Library/Caches/com.apple.SourceKitService
+          key: brew-${{ runner.os }}-${{ matrix.python-version }}-${{ hashFiles('.github/workflows/**', 'requirements/**/*.txt') }}
+          restore-keys: |
+            brew-${{ runner.os }}-${{ matrix.python-version }}-
+            brew-${{ runner.os }}-
 
       - name: Install OS packages (Homebrew)
         run: |
           set -euo pipefail
           brew update
-          # Minimal native deps to build and run tests headless (Agg backend).
+          # Use cached bottles if present
           brew install ccache ninja gobject-introspection gtk4 imagemagick || true
 
       - name: Upgrade pip tooling
@@ -113,10 +125,41 @@ jobs:
             echo "   Proceeding without testmon warm cache"
           fi
 
-      - name: Run tests (pytest + testmon)
+      - name: Debug testmon cache + env
         run: |
-          # Keep it simple; you can switch to the upstream flags later if you want.
-          pytest --testmon -q
+          set -euo pipefail
+          echo "PWD: $(pwd)"
+          echo "Python: $(python -V)"
+          echo "Which python: $(which python)"
+          echo "Pytest version/plugins:"
+          pytest --version --plugins || true
+      
+          echo "Repo root listing:"
+          ls -la
+      
+          echo "Check .testmondata existence & size:"
+          if [ -f .testmondata ]; then
+            ls -lh .testmondata
+            echo "File type:"
+            file .testmondata || true
+            echo "SQLite tables:"
+            sqlite3 .testmondata ".tables" || true
+            echo "SQLite schema (first 100 lines):"
+            sqlite3 .testmondata ".schema" | head -n 100 || true
+            echo "Recent runs (if such a table exists):"
+            sqlite3 .testmondata "SELECT name FROM sqlite_master WHERE type='table';" | tr ' ' '\n' | grep -i run || true
+          else
+            echo "⚠️  .testmondata not found in $(pwd)"
+          fi
+
+
+      - name: Run tests (pytest + testmon, verbose)
+        run: |
+          # Show selected tests, reasons, live stdout
+          # -vv : more verbose node ids
+          # -s  : don't capture stdout/stderr
+          # -rA : show summary for all test outcomes (skipped/xfailed/etc.)
+          pytest --testmon -vv -s -rA
 
       - name: Upload testmon data to server
         if: always()
