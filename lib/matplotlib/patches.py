@@ -57,6 +57,7 @@ class Patch(artist.Artist):
                  capstyle=None,
                  joinstyle=None,
                  hatchcolor=None,
+                 edgegapcolor=None,
                  **kwargs):
         """
         The following kwarg properties are supported
@@ -88,6 +89,7 @@ class Patch(artist.Artist):
         self._linewidth = 0
         self._unscaled_dash_pattern = (0, None)  # offset, dash
         self._dash_pattern = (0, None)  # offset, dash (scaled by linewidth)
+        self._gapcolor = None
 
         self.set_linestyle(linestyle)
         self.set_linewidth(linewidth)
@@ -95,6 +97,7 @@ class Patch(artist.Artist):
         self.set_hatch(hatch)
         self.set_capstyle(capstyle)
         self.set_joinstyle(joinstyle)
+        self.set_edgegapcolor(edgegapcolor)
 
         if len(kwargs):
             self._internal_update(kwargs)
@@ -294,6 +297,7 @@ class Patch(artist.Artist):
         self._hatch_color = other._hatch_color
         self._original_hatchcolor = other._original_hatchcolor
         self._unscaled_dash_pattern = other._unscaled_dash_pattern
+        self._gapcolor = other._gapcolor
         self.set_linewidth(other._linewidth)  # also sets scaled dashes
         self.set_transform(other.get_data_transform())
         # If the transform of other needs further initialization, then it will
@@ -442,6 +446,42 @@ class Patch(artist.Artist):
         self._original_hatchcolor = color
         self._set_hatchcolor(color)
 
+    def get_edgegapcolor(self):
+        """
+        Return the edge gap color.
+
+        .. versionadded:: 3.11
+
+        See also `~.Patch.set_edgegapcolor`.
+        """
+        return self._gapcolor
+
+    def set_edgegapcolor(self, edgegapcolor):
+        """
+        Set a color to fill the gaps in the dashed edge style.
+
+        .. versionadded:: 3.11
+
+        .. note::
+
+            Striped edges are created by drawing two interleaved dashed lines.
+            There can be overlaps between those two, which may result in
+            artifacts when using transparency.
+
+            This functionality is experimental and may change.
+
+        Parameters
+        ----------
+        edgegapcolor : :mpltype:`color` or None
+            The color with which to fill the gaps. If None, the gaps are
+            unfilled.
+        """
+        if edgegapcolor is not None:
+            self._gapcolor = colors.to_rgba(edgegapcolor, self._alpha)
+        else:
+            self._gapcolor = None
+        self.stale = True
+
     def set_alpha(self, alpha):
         # docstring inherited
         super().set_alpha(alpha)
@@ -468,26 +508,40 @@ class Patch(artist.Artist):
         """
         Set the patch linestyle.
 
-        =======================================================  ================
-        linestyle                                                description
-        =======================================================  ================
-        ``'-'`` or ``'solid'``                                   solid line
-        ``'--'`` or ``'dashed'``                                 dashed line
-        ``'-.'`` or ``'dashdot'``                                dash-dotted line
-        ``':'`` or ``'dotted'``                                  dotted line
-        ``''`` or ``'none'`` (discouraged: ``'None'``, ``' '``)  draw nothing
-        =======================================================  ================
-
-        Alternatively a dash tuple of the following form can be provided::
-
-            (offset, onoffseq)
-
-        where ``onoffseq`` is an even length tuple of on and off ink in points.
-
         Parameters
         ----------
-        ls : {'-', '--', '-.', ':', '', (offset, on-off-seq), ...}
-            The line style.
+        ls : {'-', '--', '-.', ':', '', ...} or (offset, on-off-seq)
+            Possible values:
+
+            - A string:
+
+              =======================================================  ================
+              linestyle                                                description
+              =======================================================  ================
+              ``'-'`` or ``'solid'``                                   solid line
+              ``'--'`` or ``'dashed'``                                 dashed line
+              ``'-.'`` or ``'dashdot'``                                dash-dotted line
+              ``':'`` or ``'dotted'``                                  dotted line
+              ``''`` or ``'none'`` (discouraged: ``'None'``, ``' '``)  draw nothing
+              =======================================================  ================
+
+            - A tuple describing the start position and lengths of dashes and spaces:
+
+                  (offset, onoffseq)
+
+              where
+
+              - *offset* is a float specifying the offset (in points); i.e. how much
+                is the dash pattern shifted.
+              - *onoffseq* is a sequence of on and off ink in points. There can be
+                arbitrary many pairs of on and off values.
+
+              Example: The tuple ``(0, (10, 5, 1, 5))`` means that the pattern starts
+              at the beginning of the line. It draws a 10 point long dash,
+              then a 5 point long space, then a 1 point long dash, followed by a 5 point
+              long space, and then the pattern repeats.
+
+            For examples see :doc:`/gallery/lines_bars_and_markers/linestyles`.
         """
         if ls is None:
             ls = "solid"
@@ -604,6 +658,17 @@ class Patch(artist.Artist):
         """Return the hatch linewidth."""
         return self._hatch_linewidth
 
+    def _has_dashed_edge(self):
+        """
+        Return whether the patch edge has a dashed linestyle.
+
+        A custom linestyle is assumed to be dashed, we do not inspect the
+        ``onoffseq`` directly.
+
+        See also `~.Patch.set_linestyle`.
+        """
+        return self._linestyle not in ('solid', '-')
+
     def _draw_paths_with_artist_properties(
             self, renderer, draw_path_args_list):
         """
@@ -618,13 +683,10 @@ class Patch(artist.Artist):
         renderer.open_group('patch', self.get_gid())
         gc = renderer.new_gc()
 
-        gc.set_foreground(self._edgecolor, isRGBA=True)
-
         lw = self._linewidth
         if self._edgecolor[3] == 0 or self._linestyle == 'None':
             lw = 0
         gc.set_linewidth(lw)
-        gc.set_dashes(*self._dash_pattern)
         gc.set_capstyle(self._capstyle)
         gc.set_joinstyle(self._joinstyle)
 
@@ -647,6 +709,18 @@ class Patch(artist.Artist):
             from matplotlib.patheffects import PathEffectRenderer
             renderer = PathEffectRenderer(self.get_path_effects(), renderer)
 
+        # Draw the gaps first if gapcolor is set
+        if self._has_dashed_edge() and self._gapcolor is not None:
+            gc.set_foreground(self._gapcolor, isRGBA=True)
+            offset_gaps, gaps = mlines._get_inverse_dash_pattern(
+                *self._dash_pattern)
+            gc.set_dashes(offset_gaps, gaps)
+            for draw_path_args in draw_path_args_list:
+                renderer.draw_path(gc, *draw_path_args)
+
+        # Draw the main edge
+        gc.set_foreground(self._edgecolor, isRGBA=True)
+        gc.set_dashes(*self._dash_pattern)
         for draw_path_args in draw_path_args_list:
             renderer.draw_path(gc, *draw_path_args)
 

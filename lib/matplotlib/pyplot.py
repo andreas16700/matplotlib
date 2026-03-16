@@ -398,9 +398,6 @@ def switch_backend(newbackend: str) -> None:
     another interactive backend has started.  Switching to and from
     non-interactive backends is always possible.
 
-    If the new backend is different than the current backend then all open
-    Figures will be closed via ``plt.close('all')``.
-
     Parameters
     ----------
     newbackend : str
@@ -1665,7 +1662,7 @@ def subplots(
     height_ratios: Sequence[float] | None = ...,
     subplot_kw: dict[str, Any] | None = ...,
     gridspec_kw: dict[str, Any] | None = ...,
-    **fig_kw
+    **fig_kw: Any
 ) -> tuple[Figure, Axes]:
     ...
 
@@ -1682,7 +1679,7 @@ def subplots(
     height_ratios: Sequence[float] | None = ...,
     subplot_kw: dict[str, Any] | None = ...,
     gridspec_kw: dict[str, Any] | None = ...,
-    **fig_kw
+    **fig_kw: Any
 ) -> tuple[Figure, np.ndarray]:  # TODO numpy/numpy#24738
     ...
 
@@ -1699,7 +1696,7 @@ def subplots(
     height_ratios: Sequence[float] | None = ...,
     subplot_kw: dict[str, Any] | None = ...,
     gridspec_kw: dict[str, Any] | None = ...,
-    **fig_kw
+    **fig_kw: Any
 ) -> tuple[Figure, Any]:
     ...
 
@@ -1713,7 +1710,7 @@ def subplots(
     height_ratios: Sequence[float] | None = None,
     subplot_kw: dict[str, Any] | None = None,
     gridspec_kw: dict[str, Any] | None = None,
-    **fig_kw
+    **fig_kw: Any
 ) -> tuple[Figure, Any]:
     """
     Create a figure and a set of subplots.

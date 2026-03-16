@@ -35,7 +35,6 @@ class Widget:
 class AxesWidget(Widget):
     ax: Axes
     def __init__(self, ax: Axes) -> None: ...
-    def __del__(self) -> None: ...
     @property
     def canvas(self) -> FigureCanvasBase | None: ...
     def connect_event(self, event: Event, callback: Callable) -> None: ...
@@ -156,6 +155,7 @@ class CheckButtons(AxesWidget):
         labels: Sequence[str],
         actives: Iterable[bool] | None = ...,
         *,
+        layout: None | Literal["vertical", "horizontal"] | tuple[int, int] = None,
         useblit: bool = ...,
         label_props: dict[str, Sequence[Any]] | None = ...,
         frame_props: dict[str, Any] | None = ...,
@@ -202,6 +202,7 @@ class TextBox(AxesWidget):
 class RadioButtons(AxesWidget):
     activecolor: ColorType
     value_selected: str
+    index_selected: int
     labels: list[Text]
     def __init__(
         self,
@@ -210,6 +211,7 @@ class RadioButtons(AxesWidget):
         active: int = ...,
         activecolor: ColorType | None = ...,
         *,
+        layout: None | Literal["vertical", "horizontal"] | tuple[int, int] = None,
         useblit: bool = ...,
         label_props: dict[str, Sequence[Any]] | None = ...,
         radio_props: dict[str, Any] | None = ...,

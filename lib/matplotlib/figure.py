@@ -376,9 +376,16 @@ default: %(va)s
         else:
             suplab = self.text(x, y, t, **kwargs)
             setattr(self, info['name'], suplab)
+            suplab._remove_method = functools.partial(self._remove_suplabel,
+                                                      name=info['name'])
+
         suplab._autopos = autopos
         self.stale = True
         return suplab
+
+    def _remove_suplabel(self, label, name):
+        self.texts.remove(label)
+        setattr(self, name, None)
 
     @_docstring.Substitution(x0=0.5, y0=0.98, name='super title', ha='center',
                              va='top', rc='title')
@@ -947,7 +954,7 @@ default: %(va)s
 
         for name in ax._axis_names:  # Break link between any shared Axes
             grouper = ax._shared_axes[name]
-            siblings = [other for other in grouper.get_siblings(ax) if other is not ax]
+            siblings = grouper.get_siblings(ax, include_self=False)
             if not siblings:  # Axes was not shared along this axis; we're done.
                 continue
             grouper.remove(ax)

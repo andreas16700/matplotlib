@@ -158,7 +158,7 @@ from packaging.version import parse as parse_version
 
 # cbook must import matplotlib only within function
 # definitions, so it is safe to import from it here.
-from . import _api, _version, cbook, _docstring, rcsetup
+from . import _api, _version, cbook, rcsetup
 from matplotlib._api import MatplotlibDeprecationWarning
 from matplotlib.colors import _color_sequences as color_sequences
 from matplotlib.rcsetup import cycler  # noqa: F401
@@ -536,6 +536,28 @@ def _get_config_or_cache_dir(xdg_base_getter):
             configdir = Path(xdg_base_getter(), "matplotlib")
         except RuntimeError:  # raised if Path.home() is not available
             pass
+    elif sys.platform == 'win32':
+        # On Windows, prefer %LOCALAPPDATA%\matplotlib which is the proper
+        # location for non-roaming application data (cache and config).
+        # See: https://docs.microsoft.com/en-us/windows/apps/design/app-settings/store-and-retrieve-app-data
+        #
+        # However, for backwards compatibility, if the old location
+        # (%USERPROFILE%\.matplotlib) exists, continue using it so existing
+        # users don't lose their config.
+        try:
+            old_configdir = Path.home() / ".matplotlib"
+            if old_configdir.is_dir():
+                configdir = old_configdir
+            else:
+                localappdata = os.environ.get('LOCALAPPDATA')
+                if localappdata:
+                    configdir = Path(localappdata) / "matplotlib"
+                else:
+                    configdir = old_configdir
+        except RuntimeError:  # raised if Path.home() is not available
+            localappdata = os.environ.get('LOCALAPPDATA')
+            if localappdata:
+                configdir = Path(localappdata) / "matplotlib"
     else:
         try:
             configdir = Path.home() / ".matplotlib"
@@ -586,8 +608,9 @@ def get_configdir():
 
     1. If the MPLCONFIGDIR environment variable is supplied, choose that.
     2. On Linux, follow the XDG specification and look first in
-       ``$XDG_CONFIG_HOME``, if defined, or ``$HOME/.config``.  On other
-       platforms, choose ``$HOME/.matplotlib``.
+       ``$XDG_CONFIG_HOME``, if defined, or ``$HOME/.config``.  On Windows,
+       use ``%LOCALAPPDATA%\\matplotlib``.  On other platforms, choose
+       ``$HOME/.matplotlib``.
     3. If the chosen directory exists and is writable, use that as the
        configuration directory.
     4. Else, create a temporary directory, and use it as the configuration
@@ -602,7 +625,8 @@ def get_cachedir():
     Return the string path of the cache directory.
 
     The procedure used to find the directory is the same as for
-    `get_configdir`, except using ``$XDG_CACHE_HOME``/``$HOME/.cache`` instead.
+    `get_configdir`, except using ``$XDG_CACHE_HOME``/``$HOME/.cache`` instead
+    on Linux.  On Windows, uses ``%LOCALAPPDATA%\\matplotlib`` (same as config).
     """
     return _get_config_or_cache_dir(_get_xdg_cache_dir)
 
@@ -658,23 +682,13 @@ def matplotlib_fname():
                        "install is broken")
 
 
-@_docstring.Substitution(
-    "\n".join(map("- {}".format, sorted(rcsetup._validators, key=str.lower)))
-)
 class RcParams(MutableMapping, dict):
     """
     A dict-like key-value store for config parameters, including validation.
 
-    Validating functions are defined and associated with rc parameters in
-    :mod:`matplotlib.rcsetup`.
+    This is the data structure behind `matplotlib.rcParams`.
 
-    The list of rcParams is:
-
-    %s
-
-    See Also
-    --------
-    :ref:`customizing-with-matplotlibrc-files`
+    The complete list of rcParams can be found in :doc:`/users/explain/configuration`.
     """
 
     validate = rcsetup._validators
@@ -758,7 +772,7 @@ class RcParams(MutableMapping, dict):
                 and val is rcsetup._auto_backend_sentinel
                 and "backend" in self):
             return
-        valid_key = _api.check_getitem(
+        valid_key = _api.getitem_checked(
             self.validate, rcParam=key, _error_cls=KeyError
         )
         try:
@@ -1202,8 +1216,7 @@ def use(backend, *, force=True):
     Select the backend used for rendering and GUI integration.
 
     If pyplot is already imported, `~matplotlib.pyplot.switch_backend` is used
-    and if the new backend is different than the current backend, all Figures
-    will be closed.
+    to switch the backend.
 
     Parameters
     ----------
@@ -1502,6 +1515,8 @@ def _preprocess_data(func=None, *, replace_names=None, label_namer=None):
 
     @functools.wraps(func)
     def inner(ax, *args, data=None, **kwargs):
+        __tracebackhide__ = True
+
         if data is None:
             return func(
                 ax,

@@ -106,12 +106,13 @@ class Axes3D(Axes):
             If None, defaults to 4:4:3
         computed_zorder : bool, default: True
             If True, the draw order is computed based on the average position
-            of the `.Artist`\\s along the view direction.
+            along the view direction for supported artist types (currently
+            Collections and Patches only).
             Set to False if you want to manually control the order in which
             Artists are drawn on top of each other using their *zorder*
             attribute. This can be used for fine-tuning if the automatic order
             does not produce the desired result. Note however, that a manual
-            zorder will only be correct for a limited view angle. If the figure
+            order will only be correct for a limited view angle. If the figure
             is rotated by the user, it will look wrong from certain angles.
 
         **kwargs
@@ -1146,7 +1147,7 @@ class Axes3D(Axes):
             azim = self.initial_azim
         if roll is None:
             roll = self.initial_roll
-        vertical_axis = _api.check_getitem(
+        vertical_axis = _api.getitem_checked(
             {name: idx for idx, name in enumerate(self._axis_names)},
             vertical_axis=vertical_axis,
         )
@@ -1597,6 +1598,11 @@ class Axes3D(Axes):
 
                 q = dq * q
                 elev, azim, roll = np.rad2deg(q.as_cardan_angles())
+            step = mpl.rcParams["axes3d.snap_rotation"]
+            if step > 0 and getattr(event, "key", None) == "control":
+                elev = step * round(elev / step)
+                azim = step * round(azim / step)
+                roll = step * round(roll / step)
 
             # update view
             vertical_axis = self._axis_names[self._vertical_axis]

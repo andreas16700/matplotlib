@@ -1029,7 +1029,7 @@ class LogFormatter(Formatter):
             return ''
 
         vmin, vmax = self.axis.get_view_interval()
-        vmin, vmax = mtransforms.nonsingular(vmin, vmax, expander=0.05)
+        vmin, vmax = mtransforms._nonsingular(vmin, vmax, expander=0.05)
         s = self._num_to_string(x, vmin, vmax)
         return self.fix_minus(s)
 
@@ -1730,7 +1730,7 @@ class Locator(TickHelper):
           default view limits.
         - Otherwise, ``(v0, v1)`` is returned without modification.
         """
-        return mtransforms.nonsingular(v0, v1, expander=.05)
+        return mtransforms._nonsingular(v0, v1, expander=.05)
 
     def view_limits(self, vmin, vmax):
         """
@@ -1738,7 +1738,7 @@ class Locator(TickHelper):
 
         Subclasses should override this method to change locator behaviour.
         """
-        return mtransforms.nonsingular(vmin, vmax)
+        return mtransforms._nonsingular(vmin, vmax)
 
 
 class IndexLocator(Locator):
@@ -1767,8 +1767,11 @@ class IndexLocator(Locator):
         return self.tick_values(dmin, dmax)
 
     def tick_values(self, vmin, vmax):
-        return self.raise_if_exceeds(
-            np.arange(vmin + self.offset, vmax + 1, self._base))
+        # We want tick values in the closed interval [vmin, vmax].
+        # Since np.arange(start, stop) returns values in the semi-open interval
+        # [start, stop), we add a minimal offset so that stop = vmax + eps
+        tick_values = np.arange(vmin + self.offset, vmax + 1e-12, self._base)
+        return self.raise_if_exceeds(tick_values)
 
 
 class FixedLocator(Locator):
@@ -1881,7 +1884,7 @@ class LinearLocator(Locator):
         return self.tick_values(vmin, vmax)
 
     def tick_values(self, vmin, vmax):
-        vmin, vmax = mtransforms.nonsingular(vmin, vmax, expander=0.05)
+        vmin, vmax = mtransforms._nonsingular(vmin, vmax, expander=0.05)
 
         if (vmin, vmax) in self.presets:
             return self.presets[(vmin, vmax)]
@@ -1910,7 +1913,7 @@ class LinearLocator(Locator):
             vmin = math.floor(scale * vmin) / scale
             vmax = math.ceil(scale * vmax) / scale
 
-        return mtransforms.nonsingular(vmin, vmax)
+        return mtransforms._nonsingular(vmin, vmax)
 
 
 class MultipleLocator(Locator):
@@ -1980,7 +1983,7 @@ class MultipleLocator(Locator):
             vmin = dmin
             vmax = dmax
 
-        return mtransforms.nonsingular(vmin, vmax)
+        return mtransforms._nonsingular(vmin, vmax)
 
 
 def scale_range(vmin, vmax, n=1, threshold=100):
@@ -2236,7 +2239,7 @@ class MaxNLocator(Locator):
         if self._symmetric:
             vmax = max(abs(vmin), abs(vmax))
             vmin = -vmax
-        vmin, vmax = mtransforms.nonsingular(
+        vmin, vmax = mtransforms._nonsingular(
             vmin, vmax, expander=1e-13, tiny=1e-14)
         locs = self._raw_ticks(vmin, vmax)
 
@@ -2254,7 +2257,7 @@ class MaxNLocator(Locator):
             dmax = max(abs(dmin), abs(dmax))
             dmin = -dmax
 
-        dmin, dmax = mtransforms.nonsingular(
+        dmin, dmax = mtransforms._nonsingular(
             dmin, dmax, expander=1e-12, tiny=1e-13)
 
         if mpl.rcParams['axes.autolimit_mode'] == 'round_numbers':
@@ -2718,7 +2721,7 @@ class SymmetricalLogLocator(Locator):
                 vmin = _decade_less(vmin, b)
                 vmax = _decade_greater(vmax, b)
 
-        return mtransforms.nonsingular(vmin, vmax)
+        return mtransforms._nonsingular(vmin, vmax)
 
 
 class AsinhLocator(Locator):

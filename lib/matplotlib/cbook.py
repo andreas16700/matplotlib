@@ -886,10 +886,17 @@ class Grouper:
         for group in unique_groups.values():
             yield sorted(group, key=self._ordering.__getitem__)
 
-    def get_siblings(self, a):
-        """Return all of the items joined with *a*, including itself."""
+    def get_siblings(self, a, *, include_self=True):
+        """
+        Return all the items joined with *a*.
+
+        *a* is included in the list if *include_self* is True.
+        """
         siblings = self._mapping.get(a, [a])
-        return sorted(siblings, key=self._ordering.get)
+        result = sorted(siblings, key=self._ordering.get)
+        if not include_self:
+            result.remove(a)
+        return result
 
 
 class GrouperView:
@@ -905,11 +912,13 @@ class GrouperView:
         """
         return self._grouper.joined(a, b)
 
-    def get_siblings(self, a):
+    def get_siblings(self, a, *, include_self=True):
         """
-        Return all of the items joined with *a*, including itself.
+        Return all the items joined with *a*.
+
+        *a* is included in the list if *include_self* is True.
         """
-        return self._grouper.get_siblings(a)
+        return self._grouper.get_siblings(a, include_self=include_self)
 
 
 def simple_linear_interpolation(a, steps):
@@ -1463,9 +1472,13 @@ def violin_stats(X, method=("GaussianKDE", "scott"), points=100, quantiles=None)
 
     Parameters
     ----------
-    X : array-like
+    X : 1D array or sequence of 1D arrays or 2D array
         Sample data that will be used to produce the gaussian kernel density
-        estimates. Must have 2 or fewer dimensions.
+        estimates. Possible values:
+
+        - 1D array: Statistics are computed for that array.
+        - sequence of 1D arrays: Statistics are computed for each array in the sequence.
+        - 2D array: Statistics are computed for each column in the array.
 
     method : (name, bw_method) or callable,
         The method used to calculate the kernel density estimate for each
@@ -1827,7 +1840,7 @@ def normalize_kwargs(kw, alias_mapping=None):
         as an empty dict, to support functions with an optional parameter of
         the form ``props=None``.
 
-    alias_mapping : dict or Artist subclass or Artist instance, optional
+    alias_mapping : Artist subclass or Artist instance
         A mapping between a canonical name to a list of aliases, in order of
         precedence from lowest to highest.
 
@@ -1845,31 +1858,35 @@ def normalize_kwargs(kw, alias_mapping=None):
     """
     from matplotlib.artist import Artist
 
+    # deal with default value of alias_mapping
+    if (isinstance(alias_mapping, type) and issubclass(alias_mapping, Artist)
+          or isinstance(alias_mapping, Artist)):
+        alias_to_prop = getattr(alias_mapping, "_alias_to_prop", {})
+    else:
+        if alias_mapping is None:
+            alias_mapping = {}
+        _api.warn_deprecated("3.11", message=(
+            "Passing a dict or None as alias_mapping to normalize_kwargs is "
+            "deprecated since %(since)s and support will be removed "
+            "%(removal)s; pass an Artist instance or type instead."))
+        # Convert old format to new format.
+        alias_to_prop = {alias: prop for prop, aliases in alias_mapping.items()
+                         for alias in aliases}
+
     if kw is None:
         return {}
 
-    # deal with default value of alias_mapping
-    if alias_mapping is None:
-        alias_mapping = {}
-    elif (isinstance(alias_mapping, type) and issubclass(alias_mapping, Artist)
-          or isinstance(alias_mapping, Artist)):
-        alias_mapping = getattr(alias_mapping, "_alias_map", {})
+    canonicalized = {alias_to_prop.get(k, k): v for k, v in kw.items()}
+    if len(canonicalized) == len(kw):
+        return canonicalized
 
-    to_canonical = {alias: canonical
-                    for canonical, alias_list in alias_mapping.items()
-                    for alias in alias_list}
     canonical_to_seen = {}
-    ret = {}  # output dictionary
-
-    for k, v in kw.items():
-        canonical = to_canonical.get(k, k)
+    for k in kw:
+        canonical = alias_to_prop.get(k, k)
         if canonical in canonical_to_seen:
             raise TypeError(f"Got both {canonical_to_seen[canonical]!r} and "
                             f"{k!r}, which are aliases of one another")
         canonical_to_seen[canonical] = k
-        ret[canonical] = v
-
-    return ret
 
 
 @contextlib.contextmanager
@@ -2403,6 +2420,18 @@ def _is_jax_array(x):
             and isinstance(x, tp))
 
 
+def _is_mlx_array(x):
+    """Return whether *x* is a MLX Array."""
+    try:
+        # We're intentionally not attempting to import mlx. If somebody
+        # has created a mlx array, mlx should already be in sys.modules.
+        tp = sys.modules.get("mlx.core").array
+    except AttributeError:
+        return False  # Module not imported or a nonstandard module with no Array attr.
+    return (isinstance(tp, type)  # Just in case it's a very nonstandard module.
+            and isinstance(x, tp))
+
+
 def _is_pandas_dataframe(x):
     """Check if *x* is a Pandas DataFrame."""
     try:
@@ -2446,7 +2475,10 @@ def _unpack_to_numpy(x):
         # so in this case we do not want to return a function
         if isinstance(xtmp, np.ndarray):
             return xtmp
-    if _is_torch_array(x) or _is_jax_array(x) or _is_tensorflow_array(x):
+    if _is_torch_array(x) \
+        or _is_jax_array(x) \
+        or _is_tensorflow_array(x) \
+        or _is_mlx_array(x):
         # using np.asarray() instead of explicitly __array__(), as the latter is
         # only _one_ of many methods, and it's the last resort, see also
         # https://numpy.org/devdocs/user/basics.interoperability.html#using-arbitrary-objects-in-numpy

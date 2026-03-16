@@ -133,7 +133,7 @@ class XMLWriter:
             self.__write(_escape_cdata(data))
             self.__data = []
 
-    def start(self, tag, attrib={}, **extra):
+    def start(self, tag, attrib=None, **extra):
         """
         Open a new element.  Attributes can be given as keyword
         arguments, or as a string/string dictionary. The method returns
@@ -152,6 +152,8 @@ class XMLWriter:
         -------
         An element identifier.
         """
+        if attrib is None:
+            attrib = {}
         self.__flush()
         tag = _escape_cdata(tag)
         self.__data = []
@@ -232,12 +234,14 @@ class XMLWriter:
         while len(self.__tags) > id:
             self.end()
 
-    def element(self, tag, text=None, attrib={}, **extra):
+    def element(self, tag, text=None, attrib=None, **extra):
         """
         Add an entire element.  This is the same as calling :meth:`start`,
         :meth:`data`, and :meth:`end` in sequence. The *text* argument can be
         omitted.
         """
+        if attrib is None:
+            attrib = {}
         self.start(tag, attrib, **extra)
         if text:
             self.data(text)
@@ -1134,7 +1138,8 @@ class RendererSVG(RendererBase):
                 font_style['font-style'] = prop.get_style()
             if prop.get_variant() != 'normal':
                 font_style['font-variant'] = prop.get_variant()
-            weight = fm.weight_dict[prop.get_weight()]
+            weight = prop.get_weight()
+            weight = fm.weight_dict.get(weight, weight)  # convert to int
             if weight != 400:
                 font_style['font-weight'] = f'{weight}'
 

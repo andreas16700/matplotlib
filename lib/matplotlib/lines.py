@@ -709,9 +709,12 @@ class Line2D(Artist):
             interpolation_steps = self._path._interpolation_steps
         else:
             interpolation_steps = 1
-        xy = STEP_LOOKUP_MAP[self._drawstyle](*self._xy.T)
-        self._path = Path(np.asarray(xy).T,
-                          _interpolation_steps=interpolation_steps)
+        if self._drawstyle == 'default':
+            vertices = self._xy
+        else:
+            step_func = STEP_LOOKUP_MAP[self._drawstyle]
+            vertices = np.asarray(step_func(*self._xy.T)).T
+        self._path = Path(vertices, _interpolation_steps=interpolation_steps)
         self._transformed_path = None
         self._invalidx = False
         self._invalidy = False
@@ -724,8 +727,12 @@ class Line2D(Artist):
         """
         # Masked arrays are now handled by the Path class itself
         if subslice is not None:
-            xy = STEP_LOOKUP_MAP[self._drawstyle](*self._xy[subslice, :].T)
-            _path = Path(np.asarray(xy).T,
+            if self._drawstyle == 'default':
+                vertices = self._xy[subslice]
+            else:
+                step_func = STEP_LOOKUP_MAP[self._drawstyle]
+                vertices = np.asarray(step_func(*self._xy[subslice, :].T)).T
+            _path = Path(vertices,
                          _interpolation_steps=self._path._interpolation_steps)
         else:
             _path = self._path
@@ -1149,7 +1156,7 @@ class Line2D(Artist):
 
         Parameters
         ----------
-        ls : {'-', '--', '-.', ':', '', (offset, on-off-seq), ...}
+        ls : {'-', '--', '-.', ':', '', ...} or (offset, on-off-seq)
             Possible values:
 
             - A string:
@@ -1164,13 +1171,23 @@ class Line2D(Artist):
               ``''`` or ``'none'`` (discouraged: ``'None'``, ``' '``)  draw nothing
               =======================================================  ================
 
-            - Alternatively a dash tuple of the following form can be
-              provided::
+            - A tuple describing the start position and lengths of dashes and spaces:
 
                   (offset, onoffseq)
 
-              where ``onoffseq`` is an even length tuple of on and off ink
-              in points. See also :meth:`set_dashes`.
+              where
+
+              - *offset* is a float specifying the offset (in points); i.e. how much
+                is the dash pattern shifted.
+              - *onoffseq* is a sequence of on and off ink in points. There can be
+                arbitrary many pairs of on and off values.
+
+              Example: The tuple ``(0, (10, 5, 1, 5))`` means that the pattern starts
+              at the beginning of the line. It draws a 10 point long dash,
+              then a 5 point long space, then a 1 point long dash, followed by a 5 point
+              long space, and then the pattern repeats.
+
+              See also :meth:`set_dashes`.
 
             For examples see :doc:`/gallery/lines_bars_and_markers/linestyles`.
         """

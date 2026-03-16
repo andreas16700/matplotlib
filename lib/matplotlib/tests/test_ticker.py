@@ -6,7 +6,7 @@ import re
 from packaging.version import parse as parse_version
 
 import numpy as np
-from numpy.testing import assert_almost_equal, assert_array_equal
+from numpy.testing import assert_almost_equal, assert_array_equal, assert_allclose
 import pytest
 
 import matplotlib as mpl
@@ -603,6 +603,22 @@ class TestIndexLocator:
         index.set_params(base=7, offset=7)
         assert index._base == 7
         assert index.offset == 7
+
+    def test_tick_values_not_exceeding_vmax(self):
+        """
+        Test that tick_values does not return values greater than vmax.
+        """
+        # Test case where offset=0 could cause vmax to be included incorrectly
+        index = mticker.IndexLocator(base=1, offset=0)
+        assert_array_equal(index.tick_values(0, 4), [0, 1, 2, 3, 4])
+
+        # Test case with fractional offset
+        index = mticker.IndexLocator(base=1, offset=0.5)
+        assert_array_equal(index.tick_values(0, 4), [0.5, 1.5, 2.5, 3.5])
+
+        # Test case with base > 1
+        index = mticker.IndexLocator(base=2, offset=0)
+        assert_array_equal(index.tick_values(0, 5), [0, 2, 4])
 
 
 class TestSymmetricalLogLocator:
@@ -1935,7 +1951,10 @@ def test_bad_locator_subs(sub):
 @mpl.style.context('default')
 def test_small_range_loglocator(numticks, lims, ticks):
     ll = mticker.LogLocator(numticks=numticks)
-    assert_array_equal(ll.tick_values(*lims), ticks)
+    if parse_version(np.version.version).major < 2:
+        assert_allclose(ll.tick_values(*lims), ticks, rtol=2e-16)
+    else:
+        assert_array_equal(ll.tick_values(*lims), ticks)
 
 
 @mpl.style.context('default')

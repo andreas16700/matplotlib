@@ -117,7 +117,7 @@ def test_polar_units_1(fig_test, fig_ref):
     xs = [30.0, 45.0, 60.0, 90.0]
     ys = [1.0, 2.0, 3.0, 4.0]
 
-    plt.figure(fig_test.number)
+    plt.figure(fig_test)
     plt.polar([x * units.deg for x in xs], ys)
 
     ax = fig_ref.add_subplot(projection="polar")
@@ -134,7 +134,7 @@ def test_polar_units_2(fig_test, fig_ref):
     ys = [1.0, 2.0, 3.0, 4.0]
     ys_km = [y * units.km for y in ys]
 
-    plt.figure(fig_test.number)
+    plt.figure(fig_test)
     # test {theta,r}units.
     plt.polar(xs_deg, ys_km, thetaunits="rad", runits="km")
     assert isinstance(plt.gca().xaxis.get_major_formatter(),
@@ -214,7 +214,8 @@ def test_polar_theta_position():
     ax.set_theta_direction('clockwise')
 
 
-@image_comparison(['polar_rlabel_position.png'], style='default')
+# TODO: tighten tolerance after baseline image is regenerated for text overhaul
+@image_comparison(['polar_rlabel_position.png'], style='default', tol=0.07)
 def test_polar_rlabel_position():
     fig = plt.figure()
     ax = fig.add_subplot(projection='polar')
@@ -229,7 +230,8 @@ def test_polar_title_position():
     ax.set_title('foo')
 
 
-@image_comparison(['polar_theta_wedge.png'], style='default')
+# TODO: tighten tolerance after baseline image is regenerated for text overhaul
+@image_comparison(['polar_theta_wedge.png'], style='default', tol=0.2)
 def test_polar_theta_limits():
     r = np.arange(0, 3.0, 0.01)
     theta = 2*np.pi*r

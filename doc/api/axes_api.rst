@@ -450,6 +450,7 @@ Units
    Axes.convert_yunits
    Axes.have_units
 
+.. _axes-api-adding-artists:
 
 Adding artists
 ==============
@@ -628,6 +629,8 @@ Other
    Axes.get_transformed_clip_path_and_affine
    Axes.has_data
    Axes.set
+   Axes.get_figure
+   Axes.figure
    Axes.remove
 
 .. autoclass:: matplotlib.axes.Axes.ArtistList

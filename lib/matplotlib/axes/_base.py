@@ -904,7 +904,7 @@ class _AxesBase(martist.Artist):
             Either an element of ``self._axis_names``, or "all".
         tight : bool or None, default: None
         """
-        axis_names = _api.check_getitem(
+        axis_names = _api.getitem_checked(
             {**{k: [k] for k in self._axis_names}, "all": self._axis_names},
             axis=axis)
         for name in axis_names:
@@ -3014,15 +3014,17 @@ class _AxesBase(martist.Artist):
         x_stickies = y_stickies = np.array([])
         if self.use_sticky_edges:
             if self._xmargin and scalex and self.get_autoscalex_on():
-                x_stickies = np.sort(np.concatenate([
-                    artist.sticky_edges.x
-                    for ax in self._shared_axes["x"].get_siblings(self)
-                    for artist in ax.get_children()]))
+                edges = []
+                for ax in self._shared_axes["x"].get_siblings(self):
+                    for artist in ax.get_children():
+                        edges.extend(artist.sticky_edges.x)
+                x_stickies = np.sort(edges)
             if self._ymargin and scaley and self.get_autoscaley_on():
-                y_stickies = np.sort(np.concatenate([
-                    artist.sticky_edges.y
-                    for ax in self._shared_axes["y"].get_siblings(self)
-                    for artist in ax.get_children()]))
+                edges = []
+                for ax in self._shared_axes["y"].get_siblings(self):
+                    for artist in ax.get_children():
+                        edges.extend(artist.sticky_edges.y)
+                y_stickies = np.sort(edges)
         if self.get_xscale() == 'log':
             x_stickies = x_stickies[x_stickies > 0]
         if self.get_yscale() == 'log':
@@ -3426,10 +3428,10 @@ class _AxesBase(martist.Artist):
                                  ) from err
         STYLES = {'sci': True, 'scientific': True, 'plain': False, '': None, None: None}
         # The '' option is included for backwards-compatibility.
-        is_sci_style = _api.check_getitem(STYLES, style=style)
+        is_sci_style = _api.getitem_checked(STYLES, style=style)
         axis_map = {**{k: [v] for k, v in self._axis_map.items()},
                     'both': list(self._axis_map.values())}
-        axises = _api.check_getitem(axis_map, axis=axis)
+        axises = _api.getitem_checked(axis_map, axis=axis)
         try:
             for axis in axises:
                 if is_sci_style is not None:
@@ -4756,13 +4758,15 @@ class _AxesBase(martist.Artist):
         ax2.yaxis.units = self.yaxis.units
         return ax2
 
-    def get_shared_x_axes(self):
+    @classmethod
+    def get_shared_x_axes(cls):
         """Return an immutable view on the shared x-axes Grouper."""
-        return cbook.GrouperView(self._shared_axes["x"])
+        return cbook.GrouperView(cls._shared_axes["x"])
 
-    def get_shared_y_axes(self):
+    @classmethod
+    def get_shared_y_axes(cls):
         """Return an immutable view on the shared y-axes Grouper."""
-        return cbook.GrouperView(self._shared_axes["y"])
+        return cbook.GrouperView(cls._shared_axes["y"])
 
     def label_outer(self, remove_inner_ticks=False):
         """
