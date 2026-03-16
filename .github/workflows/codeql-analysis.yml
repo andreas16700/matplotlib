@@ -10,6 +10,8 @@ on:
   schedule:
     - cron: '45 19 * * 1'
 
+permissions: {}
+
 jobs:
   analyze:
     if: github.repository == 'matplotlib/matplotlib'
