@@ -1,4 +1,4 @@
-name: Tests (fork, multi-platform + ezmon NetDB)
+name: Tests (fork, multi-platform + ezmon)
 
 on:
   push:
@@ -9,9 +9,9 @@ env:
   NO_AT_BRIDGE: 1  # Necessary for GTK3 interactive test
   OPENBLAS_NUM_THREADS: 1
   PYTHONFAULTHANDLER: 1
-  # NetDB configuration - direct server communication
+  # NetDB mode: download per-job SQLite from server, run locally, upload at end
   TESTMON_NET_ENABLED: "true"
-  TESTMON_SERVER: "https://ezmon.aloiz.ch"
+  TESTMON_SERVER: "https://ezmon-dev.aloiz.ch"
   TESTMON_AUTH_TOKEN: ${{ secrets.EZMON_AUTH_TOKEN }}
 
 jobs:
@@ -37,7 +37,7 @@ jobs:
             python-version: '3.12'
 
     env:
-      # NetDB identifiers
+      # Per-job identifiers for server-side DB partitioning
       REPO_ID: ${{ github.repository }}
       JOB_ID: "${{ matrix.os }}-py${{ matrix.python-version }}"
       RUN_ID: ${{ github.run_id }}
@@ -176,7 +176,7 @@ jobs:
           # Sphinx for sphinxext tests
           python -m pip install --upgrade 'sphinx!=6.1.2'
 
-          # Test runner + ezmon (our fork with NetDB support)
+          # Test runner + ezmon plugin (our fork)
           python -m pip install pytest pytest-xdist pytest-timeout
           python -m pip install --no-cache-dir git+https://github.com/andreas16700/pytest-testmon.git@main
 
@@ -238,7 +238,6 @@ jobs:
 
           echo "=== ezmon Configuration ==="
           python -c "import ezmon; print('ezmon version:', ezmon.TESTMON_VERSION)"
-          echo "NetDB enabled: $TESTMON_NET_ENABLED"
           echo "Server: $TESTMON_SERVER"
           echo "Repo ID: $REPO_ID"
           echo "Job ID: $JOB_ID"
@@ -249,7 +248,8 @@ jobs:
 
       # ===== RUN TESTS =====
 
-      - name: Run tests (pytest + ezmon NetDB)
+      # Flow: download per-job SQLite → run locally with DepStore → upload at end
+      - name: Run tests (pytest + ezmon)
         run: |
           python -m pytest \
             --ezmon --ezmon-no-reorder \
