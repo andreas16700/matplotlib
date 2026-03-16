@@ -1716,12 +1716,21 @@ class _AxesBase(martist.Artist):
         share : bool, default: False
             If ``True``, apply the settings to all shared Axes.
 
+        Notes
+        -----
+        The aspect will require an update of the Axes position or limits (which
+        one depends on *adjustable*). This update is applied lazily, the latest
+        when the figure is drawn. Use `.apply_aspect` to force an update.
+
         See Also
         --------
         matplotlib.axes.Axes.set_adjustable
             Set how the Axes adjusts to achieve the required aspect ratio.
         matplotlib.axes.Axes.set_anchor
             Set the position in case of extra space.
+        matplotlib.axes.Axes.apply_aspect
+            Force the update required to meet the aspect ratio to happen
+            immediately.
         """
         if cbook._str_equal(aspect, 'equal'):
             aspect = 1
