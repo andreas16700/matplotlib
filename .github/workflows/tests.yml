@@ -49,7 +49,7 @@ jobs:
     env:
       # Only used by ezmon jobs; vanilla jobs ignore these
       TESTMON_NET_ENABLED: ${{ matrix.ezmon && 'true' || 'false' }}
-      TESTMON_SERVER: "https://ezmon-dev.aloiz.ch"
+      TESTMON_SERVER: "https://ezmon.aloiz.ch"
       TESTMON_AUTH_TOKEN: ${{ secrets.EZMON_AUTH_TOKEN }}
       REPO_ID: ${{ github.repository }}
       JOB_ID: "${{ matrix.os }}-py${{ matrix.python-version }}"
